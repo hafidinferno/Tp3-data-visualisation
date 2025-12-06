@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Visualisation Déchets France</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      /* --- STYLE GLOBAL --- */
+      :root {
+        --primary-color: #2c3e50;
+        --accent-color: #31a354;
+        --bg-color: #f4f6f8;
+        --card-bg: #ffffff;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--primary-color);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        padding: 40px 0;
+      }
+
+      .container {
+        background-color: var(--card-bg);
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      h1 {
+        margin: 0 0 5px 0;
+        font-weight: 700;
+        font-size: 1.8rem;
+        letter-spacing: -0.5px;
+      }
+      .subtitle {
+        font-size: 0.9rem;
+        color: #7f8c8d;
+        margin-bottom: 25px;
+      }
+
+      /* --- INTERFACE --- */
+      #interface {
+        width: 100%;
+        max-width: 600px;
+        margin-bottom: 20px;
+        text-align: center;
+        background: #fafafa;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #eee;
+      }
+
+      #day {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--accent-color);
+        display: block;
+        margin-top: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Custom Slider */
+      input[type="range"] {
+        -webkit-appearance: none;
+        width: 100%;
+        background: transparent;
+      }
+      input[type="range"]:focus {
+        outline: none;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 8px;
+        cursor: pointer;
+        background: #e0e0e0;
+        border-radius: 4px;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        height: 24px;
+        width: 24px;
+        border-radius: 50%;
+        background: var(--accent-color);
+        cursor: pointer;
+        -webkit-appearance: none;
+        margin-top: -8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        transition: transform 0.1s;
+      }
+      input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.1);
+      }
+
+      /* --- CARTE --- */
+      .departement {
+        stroke: #fff;
+        stroke-width: 0.8px;
+        transition: fill 0.3s ease;
+        cursor: crosshair;
+      }
+      .departement:hover {
+        stroke: #333;
+        stroke-width: 2px;
+        filter: brightness(0.9);
+        z-index: 100;
+      }
+
+      /* --- TOOLTIP --- */
+      div.tooltip {
+        position: absolute;
+        text-align: left;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        pointer-events: none;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        opacity: 0;
+        transition: opacity 0.15s ease-in-out;
+        z-index: 1000;
+        color: var(--primary-color);
+        min-width: 150px;
+      }
+      .tooltip strong {
+        color: var(--accent-color);
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+        display: block;
+        margin-bottom: 5px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 4px;
+      }
+      .tooltip-year {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 2px;
+      }
+      .tooltip-value {
+        font-size: 1.1rem;
+        font-weight: bold;
+      }
+
+      /* --- LEGENDE --- */
+      .legend text {
+        font-size: 12px;
+        fill: #666;
+        font-family: sans-serif;
+      }
+      .legend-title {
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.5px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Déchets Ménagers (DEEE)</h1>
+      <div class="subtitle">
+        Analyse de l'évolution par département en France
+      </div>
+
+      <div id="interface">
+        <label
+          for="slider"
+          style="
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+          "
+          >Sélectionner l'année</label
+        >
+        <span id="day">2009</span>
+        <br />
+        <input id="slider" type="range" value="0" min="0" max="6" step="1" />
+      </div>
+    </div>
+
+    <script>
+      // 1. CONFIGURATION
+      const width = 800,
+        height = 700;
+
+      const tooltip = d3
+        .select("body")
+        .append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+      const svg = d3
+        .select(".container")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+      const g = svg.append("g");
+
+      const projection = d3
+        .geoConicConformal()
+        .center([2.454071, 46.279229])
+        .scale(2800)
+        .translate([width / 2, height / 2]);
+
+      const path = d3.geoPath().projection(projection);
+      const color = d3
+        .scaleQuantize()
+        .range(["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"]);
+
+      let globalGeoJson = {};
+
+      // 2. CHARGEMENT
+      Promise.all([
+        d3.csv("SINOE14_TonnageDecheterieParTypeDechet.csv"),
+        d3.json("departements-version-simplifiee.geojson"),
+      ])
+        .then(function ([data, json]) {
+          const cleanNumber = (str) =>
+            !str ? 0 : parseFloat(str.replace(/\s/g, "").replace(",", "."));
+          const allDEEEData = data.filter((d) => d.L_TYP_REG_DECHET === "DEEE");
+
+          const minVal = d3.min(allDEEEData, (d) => cleanNumber(d.TONNAGE_T));
+          const maxVal = d3.max(allDEEEData, (d) => cleanNumber(d.TONNAGE_T));
+          color.domain([minVal, maxVal]);
+
+          json.features.forEach(function (feature) {
+            const codeDep = feature.properties.code;
+            const historiqueDep = allDEEEData.filter(
+              (row) => row.C_DEPT === codeDep
+            );
+            feature.properties.history = historiqueDep.map((h) => ({
+              annee: h.ANNEE,
+              valeur: cleanNumber(h.TONNAGE_T),
+            }));
+          });
+
+          globalGeoJson = json;
+          addLegend();
+
+          // INITIALISATION
+          drawMap("2009");
+
+          // --- LISTENER SUR LE SLIDER (Étape 9) ---
+          d3.select("#slider").on("input", function () {
+            // Calcul de l'année : 2009 + (0*2) = 2009, 2009 + (1*2) = 2011, etc.
+            const year = 2009 + 2 * this.value;
+            drawMap(String(year));
+          });
+        })
+        .catch((error) => console.error("Erreur chargement :", error));
+
+      // 3. FONCTION DE DESSIN
+      function drawMap(annee) {
+        // A. Mise à jour du texte sous le slider (Étape 9)
+        d3.select("#day").html(annee);
+
+        // B. Dessin Carte
+        const carte = g.selectAll("path").data(globalGeoJson.features);
+
+        carte
+          .join("path")
+          .attr("class", "departement")
+          .attr("d", path)
+          .transition()
+          .duration(200)
+          .style("fill", function (d) {
+            const dataAnnee = d.properties.history.find(
+              (h) => h.annee === annee
+            );
+            return dataAnnee ? color(dataAnnee.valeur) : "#ecf0f1";
+          });
+
+        // C. Tooltip (CORRIGÉ : Affiche maintenant l'année)
+        g.selectAll("path")
+          .on("mousemove", function (event, d) {
+            const dataAnnee = d.properties.history.find(
+              (h) => h.annee === annee
+            );
+            const codeDep = d.properties.code;
+
+            // On reconstruit le HTML avec l'année
+            let htmlContent = `<strong>${d.properties.nom} (${codeDep})</strong>`;
+
+            if (dataAnnee) {
+              // Ajout de la ligne Année ici
+              htmlContent += `<div class="tooltip-year">Année ${annee}</div>`;
+              htmlContent += `<div class="tooltip-value">${Math.round(
+                dataAnnee.valeur
+              ).toLocaleString()} Tonnes</div>`;
+            } else {
+              htmlContent += `<div class="tooltip-year">Année ${annee}</div>`;
+              htmlContent += `<span style="color:#bdc3c7; font-style:italic;">Aucune donnée</span>`;
+            }
+
+            tooltip
+              .style("opacity", 1)
+              .html(htmlContent)
+              .style("left", event.pageX + 20 + "px")
+              .style("top", event.pageY - 20 + "px");
+
+            d3.select(this).raise();
+          })
+          .on("mouseout", function () {
+            tooltip.style("opacity", 0);
+          });
+      }
+
+      function addLegend() {
+        const legend = svg
+          .append("g")
+          .attr("class", "legend-group")
+          .attr("transform", `translate(50, ${height - 100})`);
+
+        legend
+          .append("text")
+          .attr("class", "legend-title")
+          .attr("y", -15)
+          .text("Tonnage Annuel (en tonnes)");
+
+        const ranges = color.range().map((c) => {
+          const d = color.invertExtent(c);
+          return {
+            c: c,
+            min: Math.round(d[0] || 0),
+            max: Math.round(d[1] || 0),
+          };
+        });
+
+        ranges.forEach((item, i) => {
+          const row = legend
+            .append("g")
+            .attr("transform", `translate(0, ${i * 22})`);
+          row
+            .append("rect")
+            .attr("width", 18)
+            .attr("height", 18)
+            .attr("rx", 3)
+            .style("fill", item.c);
+          row
+            .append("text")
+            .attr("x", 28)
+            .attr("y", 13)
+            .text(`${item.min} - ${item.max}`);
+        });
+      }
+    </script>
+  </body>
+</html>
