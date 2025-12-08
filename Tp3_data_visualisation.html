@@ -69,7 +69,7 @@
         font-variant-numeric: tabular-nums;
       }
 
-      /* Custom Slider */
+      
       input[type="range"] {
         -webkit-appearance: none;
         width: 100%;
@@ -256,7 +256,7 @@
 
           // --- LISTENER SUR LE SLIDER (Étape 9) ---
           d3.select("#slider").on("input", function () {
-            // Calcul de l'année : 2009 + (0*2) = 2009, 2009 + (1*2) = 2011, etc.
+            
             const year = 2009 + 2 * this.value;
             drawMap(String(year));
           });
@@ -265,7 +265,7 @@
 
       // 3. FONCTION DE DESSIN
       function drawMap(annee) {
-        // A. Mise à jour du texte sous le slider (Étape 9)
+       
         d3.select("#day").html(annee);
 
         // B. Dessin Carte
@@ -284,7 +284,7 @@
             return dataAnnee ? color(dataAnnee.valeur) : "#ecf0f1";
           });
 
-        // C. Tooltip (CORRIGÉ : Affiche maintenant l'année)
+       
         g.selectAll("path")
           .on("mousemove", function (event, d) {
             const dataAnnee = d.properties.history.find(
@@ -360,3 +360,4 @@
     </script>
   </body>
 </html>
+
